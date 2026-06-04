@@ -5,7 +5,7 @@ import (
 	"sort"
 	"text/template"
 
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // NewDBTemplate returns a new ClientDBModel template. It includes the following
@@ -31,8 +31,8 @@ func NewDBTemplate() *template.Template {
  import (
 	"encoding/json"
 
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 {{- end }}
 {{ define "postDBDefinitions" }}{{ end }}

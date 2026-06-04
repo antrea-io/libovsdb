@@ -3,7 +3,7 @@ package updates
 import (
 	"reflect"
 
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 func removeFromSlice(a, b reflect.Value) (reflect.Value, bool) {

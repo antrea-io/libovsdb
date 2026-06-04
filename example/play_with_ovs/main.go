@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ovn-kubernetes/libovsdb/cache"
-	"github.com/ovn-kubernetes/libovsdb/client"
-	"github.com/ovn-kubernetes/libovsdb/example/vswitchd"
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/cache"
+	"github.com/antrea-io/libovsdb/client"
+	"github.com/antrea-io/libovsdb/example/vswitchd"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // Silly game that detects creation of Bridge named "stop" and exits

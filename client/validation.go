@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ovn-kubernetes/libovsdb/mapper"
+	"github.com/antrea-io/libovsdb/mapper"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/ovn-kubernetes/libovsdb/model"
+	"github.com/antrea-io/libovsdb/model"
 )
 
 // global validator instance

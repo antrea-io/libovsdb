@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ovn-kubernetes/libovsdb/mapper"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/mapper"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // ColumnKey addresses a column and optionally a key within a column

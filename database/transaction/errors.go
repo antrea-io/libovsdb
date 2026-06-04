@@ -3,7 +3,7 @@ package transaction
 import (
 	"fmt"
 
-	"github.com/ovn-kubernetes/libovsdb/cache"
+	"github.com/antrea-io/libovsdb/cache"
 )
 
 func newIndexExistsDetails(err cache.ErrIndexExists) string {

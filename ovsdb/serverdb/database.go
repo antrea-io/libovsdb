@@ -3,7 +3,7 @@
 
 package serverdb
 
-import "github.com/ovn-kubernetes/libovsdb/model"
+import "github.com/antrea-io/libovsdb/model"
 
 const DatabaseTable = "Database"
 

@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovn-kubernetes/libovsdb/database"
-	"github.com/ovn-kubernetes/libovsdb/mapper"
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
-	"github.com/ovn-kubernetes/libovsdb/test"
+	"github.com/antrea-io/libovsdb/database"
+	"github.com/antrea-io/libovsdb/mapper"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/test"
 )
 
 func TestWaitOpEquals(t *testing.T) {

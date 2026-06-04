@@ -1,4 +1,4 @@
-module github.com/ovn-kubernetes/libovsdb
+module github.com/antrea-io/libovsdb
 
 go 1.24.0
 
