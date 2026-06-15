@@ -3,6 +3,7 @@ module github.com/ovn-kubernetes/libovsdb
 go 1.24.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/rpc2 v1.0.5
 	github.com/go-logr/logr v1.4.3
@@ -18,7 +19,6 @@ require (
 require (
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/hub v1.0.2 // indirect
