@@ -338,7 +338,7 @@ func (o *ovsdbClient) tryEndpoint(ctx context.Context, u *url.URL) (string, erro
 
 	switch u.Scheme {
 	case UNIX:
-		c, err = dialer.DialContext(ctx, u.Scheme, u.Path)
+		c, err = dialUnix(ctx, u, dialer)
 	case TCP:
 		c, err = dialer.DialContext(ctx, u.Scheme, u.Opaque)
 	case SSL:

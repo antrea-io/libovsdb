@@ -70,7 +70,11 @@ func WithEndpoint(endpoint string) Option {
 		}
 		switch ep.Scheme {
 		case UNIX:
-			if len(ep.Path) == 0 {
+			// For standard Unix sockets (e.g. "unix:/var/run/..."), url.Parse puts the path in ep.Path.
+			// For Windows named pipes lacking a leading slash (e.g. "unix:\\.\pipe\..."),
+			// url.Parse treats it as an opaque URI and puts the path in ep.Opaque.
+			// Only fallback to the default endpoint if both are empty.
+			if len(ep.Path) == 0 && len(ep.Opaque) == 0 {
 				o.endpoints = append(o.endpoints, defaultUnixEndpoint)
 				return nil
 			}

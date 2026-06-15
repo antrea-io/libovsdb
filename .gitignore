@@ -64,3 +64,6 @@ Temporary Items
 example/vswitchd/ovs.ovsschema
 example/vswitchd/*.go
 !example/vswitchd/gen.go
+
+# Go mod
+vendor
