@@ -6,8 +6,8 @@ package serverdb
 import (
 	"encoding/json"
 
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // FullDatabaseModel returns the DatabaseModel object to be used in libovsdb

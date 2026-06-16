@@ -3,7 +3,7 @@ package updates
 import (
 	"testing"
 
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/ovsdb"
 	"github.com/stretchr/testify/assert"
 )
 

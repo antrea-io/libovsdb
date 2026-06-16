@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ovn-kubernetes/libovsdb/cache"
-	"github.com/ovn-kubernetes/libovsdb/client"
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/cache"
+	"github.com/antrea-io/libovsdb/client"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // ORMBridge is the simplified ORM model of the Bridge table

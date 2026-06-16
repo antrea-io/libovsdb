@@ -10,7 +10,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // extendedGenTemplate include additional code generation that is optional, like
@@ -20,7 +20,7 @@ var extendedGenTemplate = `
 {{- define "equalExtraFields" }}{{ end }}
 {{- define "extendedGenImports" }}
 {{- if index . "WithExtendedGen" }}
-import "github.com/ovn-kubernetes/libovsdb/model"
+import "github.com/antrea-io/libovsdb/model"
 {{- end }}
 {{- end }}
 {{- define "extendedGen" }}

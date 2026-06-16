@@ -2,8 +2,8 @@ package database
 
 import (
 	"github.com/google/uuid"
-	"github.com/ovn-kubernetes/libovsdb/model"
-	"github.com/ovn-kubernetes/libovsdb/ovsdb"
+	"github.com/antrea-io/libovsdb/model"
+	"github.com/antrea-io/libovsdb/ovsdb"
 )
 
 // Database abstracts a database that a server can use to store and transact data
