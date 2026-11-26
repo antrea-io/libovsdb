@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -1257,6 +1258,28 @@ func TestNewMonitorRequest(t *testing.T) {
 	mr2, err := newMonitorRequest(info, []string{"int1", "name"}, nil)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, mr2.Columns, []string{"int1", "name"})
+
+	// Partial model should only monitor columns mapped in the client struct.
+	type partialType struct {
+		ID     string            `ovsdb:"_uuid"`
+		MyName string            `ovsdb:"name"`
+		Config map[string]string `ovsdb:"config"`
+	}
+	partialInfo, err := mapper.NewInfo("TestTable", schema.Table("TestTable"), &partialType{})
+	require.NoError(t, err)
+	mrPartial, err := newMonitorRequest(partialInfo, nil, nil)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"name", "config"}, mrPartial.Columns)
+
+	// UUID-only model should produce an empty column list without error.
+	type uuidOnlyType struct {
+		ID string `ovsdb:"_uuid"`
+	}
+	uuidOnlyInfo, err := mapper.NewInfo("TestTable", schema.Table("TestTable"), &uuidOnlyType{})
+	require.NoError(t, err)
+	mrUUIDOnly, err := newMonitorRequest(uuidOnlyInfo, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, mrUUIDOnly.Columns)
 }
 
 func TestUpdateEndpoints(t *testing.T) {
@@ -2139,4 +2162,186 @@ func TestConditionalWhereListWaitsForCacheConsistency(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Where(...).List did not complete after cache became consistent")
 	}
+}
+
+func TestMonitorAllPartialModelModifyUpdate(t *testing.T) {
+	schemaJSON := []byte(`{
+		"name": "Open_vSwitch",
+		"version": "8.8.0",
+		"tables": {
+			"Open_vSwitch": {
+				"columns": {
+					"ovs_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"db_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"system_type": {"type": {"key": "string", "min": 0, "max": 1}},
+					"system_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"external_ids": {"type": {"key": "string", "value": "string", "min": 0, "max": "unlimited"}},
+					"other_config": {"type": {"key": "string", "value": "string", "min": 0, "max": "unlimited"}},
+					"cur_cfg": {"type": "integer"},
+					"next_cfg": {"type": "integer"}
+				}
+			}
+		}
+	}`)
+
+	type FullOpenvSwitch struct {
+		UUID          string            `ovsdb:"_uuid"`
+		OvsVersion    *string           `ovsdb:"ovs_version"`
+		DBVersion     *string           `ovsdb:"db_version"`
+		SystemType    *string           `ovsdb:"system_type"`
+		SystemVersion *string           `ovsdb:"system_version"`
+		ExternalIDs   map[string]string `ovsdb:"external_ids"`
+		OtherConfig   map[string]string `ovsdb:"other_config"`
+		CurCfg        int               `ovsdb:"cur_cfg"`
+		NextCfg       int               `ovsdb:"next_cfg"`
+	}
+
+	type PartialOpenvSwitch struct {
+		UUID        string            `ovsdb:"_uuid"`
+		OvsVersion  *string           `ovsdb:"ovs_version"`
+		OtherConfig map[string]string `ovsdb:"other_config"`
+		CurCfg      int               `ovsdb:"cur_cfg"`
+		NextCfg     int               `ovsdb:"next_cfg"`
+	}
+
+	var schema ovsdb.DatabaseSchema
+	require.NoError(t, json.Unmarshal(schemaJSON, &schema))
+
+	serverClientModel, err := model.NewClientDBModel("Open_vSwitch", map[string]model.Model{
+		"Open_vSwitch": &FullOpenvSwitch{},
+	})
+	require.NoError(t, err)
+	serverDBModel, errs := model.NewDatabaseModel(schema, serverClientModel)
+	require.Empty(t, errs)
+
+	db := inmemory.NewDatabase(map[string]model.ClientDBModel{"Open_vSwitch": serverClientModel}, nil)
+	ovsdbServer, err := server.NewOvsdbServer(db, nil, serverDBModel)
+	require.NoError(t, err)
+
+	tmpDir, err := os.MkdirTemp("", "libovsdb-partial-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	sockPath := filepath.Join(tmpDir, "db.sock")
+
+	go func() {
+		_ = ovsdbServer.Serve("unix", sockPath)
+	}()
+	t.Cleanup(func() { ovsdbServer.Close() })
+	require.Eventually(t, func() bool { return ovsdbServer.Ready() }, 2*time.Second, 10*time.Millisecond)
+
+	ctx := context.Background()
+
+	// Writer client (full model) creates initial row without ovs_version (simulating ovs-ctl init).
+	writer, err := NewOVSDBClient(serverClientModel, WithEndpoint("unix:"+sockPath))
+	require.NoError(t, err)
+	require.NoError(t, writer.Connect(ctx))
+	t.Cleanup(writer.Close)
+
+	dbVer := "8.8.0"
+	ops, err := writer.Create(&FullOpenvSwitch{UUID: "row1", DBVersion: &dbVer})
+	require.NoError(t, err)
+	res, err := writer.Transact(ctx, ops...)
+	require.NoError(t, err)
+	rootUUID := res[0].UUID.GoUUID
+
+	// Partial-model client connects and calls MonitorAll() before ovs_version is populated.
+	partialModel, err := model.NewClientDBModel("Open_vSwitch", map[string]model.Model{
+		"Open_vSwitch": &PartialOpenvSwitch{},
+	})
+	require.NoError(t, err)
+	partialClient, err := NewOVSDBClient(partialModel, WithEndpoint("unix:"+sockPath))
+	require.NoError(t, err)
+	require.NoError(t, partialClient.Connect(ctx))
+	t.Cleanup(partialClient.Close)
+	_, err = partialClient.MonitorAll(ctx)
+	require.NoError(t, err)
+
+	var list []PartialOpenvSwitch
+	require.NoError(t, partialClient.List(ctx, &list))
+	require.Len(t, list, 1)
+	require.Equal(t, rootUUID, list[0].UUID)
+	require.Nil(t, list[0].OvsVersion)
+
+	// Writer updates ovs_version alongside unmodeled columns in one transaction (simulating ovs-ctl set_system_ids).
+	ovsVer := "3.7.1"
+	sysType := "debian"
+	sysVer := "12"
+	upd := &FullOpenvSwitch{
+		OvsVersion:    &ovsVer,
+		SystemType:    &sysType,
+		SystemVersion: &sysVer,
+		ExternalIDs:   map[string]string{"system-id": "test-id", "rundir": "/var/run/openvswitch"},
+	}
+	ops, err = writer.Where(&FullOpenvSwitch{UUID: rootUUID}).Update(upd, &upd.OvsVersion, &upd.SystemType, &upd.SystemVersion, &upd.ExternalIDs)
+	require.NoError(t, err)
+	_, err = writer.Transact(ctx, ops...)
+	require.NoError(t, err)
+
+	// Follow-up modeled-only update.
+	updOC := &FullOpenvSwitch{OtherConfig: map[string]string{"hw-offload": "false"}}
+	ops, err = writer.Where(&FullOpenvSwitch{UUID: rootUUID}).Update(updOC, &updOC.OtherConfig)
+	require.NoError(t, err)
+	_, err = writer.Transact(ctx, ops...)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		var l []PartialOpenvSwitch
+		if err := partialClient.List(ctx, &l); err != nil || len(l) != 1 {
+			return false
+		}
+		return l[0].OvsVersion != nil && *l[0].OvsVersion == "3.7.1" && l[0].OtherConfig["hw-offload"] == "false"
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestUpdate3ForwardsCacheErrorToErrorCh(t *testing.T) {
+	ovs, err := newOVSDBClient(defDB)
+	require.NoError(t, err)
+
+	var s ovsdb.DatabaseSchema
+	err = json.Unmarshal([]byte(schema), &s)
+	require.NoError(t, err)
+	dbModel, errs := model.NewDatabaseModel(s, defDB)
+	require.Empty(t, errs)
+
+	primaryDB := ovs.primaryDB()
+	primaryDB.model = dbModel
+	primaryDB.cache, err = cache.NewTableCache(dbModel, nil, ovs.logger)
+	require.NoError(t, err)
+	primaryDB.deferUpdates = false
+
+	cookie := newMonitorCookie(ovs.primaryDBName)
+	primaryDB.monitors[cookie.ID] = newMonitor()
+
+	cookieJSON, err := json.Marshal(cookie)
+	require.NoError(t, err)
+	txnIDJSON, err := json.Marshal("11111111-1111-1111-1111-111111111111")
+	require.NoError(t, err)
+	// Modify for a non-existent UUID triggers ErrCacheInconsistent in Populate2.
+	updatesJSON, err := json.Marshal(ovsdb.TableUpdates2{
+		"Bridge": {
+			aUUID0: {
+				Modify: &ovsdb.Row{"name": "br0"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	errReceived := make(chan error, 1)
+	go func() {
+		errReceived <- <-ovs.errorCh
+	}()
+
+	var reply []any
+	err = ovs.update3([]json.RawMessage{cookieJSON, txnIDJSON, updatesJSON}, &reply)
+	var inconsistent *cache.ErrCacheInconsistent
+	require.ErrorAs(t, err, &inconsistent)
+
+	select {
+	case chErr := <-errReceived:
+		require.ErrorAs(t, chErr, &inconsistent)
+	case <-time.After(time.Second):
+		t.Fatal("expected update3 cache error to be forwarded to errorCh")
+	}
+	// LastTransactionID must remain unchanged when cache update fails.
+	require.Equal(t, emptyUUID, primaryDB.monitors[cookie.ID].LastTransactionID)
 }

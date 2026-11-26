@@ -3157,3 +3157,90 @@ func TestTableCache_ApplyModelUpdates(t *testing.T) {
 		})
 	}
 }
+
+func TestPopulate2PartialModelMultiTable(t *testing.T) {
+	schemaJSON := []byte(`{
+		"name": "Open_vSwitch",
+		"version": "8.8.0",
+		"tables": {
+			"Open_vSwitch": {
+				"columns": {
+					"ovs_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"system_type": {"type": {"key": "string", "min": 0, "max": 1}},
+					"external_ids": {"type": {"key": "string", "value": "string", "min": 0, "max": "unlimited"}}
+				}
+			},
+			"Bridge": {
+				"columns": {
+					"name": {"type": "string"},
+					"datapath_id": {"type": {"key": "string", "min": 0, "max": 1}},
+					"datapath_version": {"type": "string"}
+				}
+			}
+		}
+	}`)
+
+	type partialOVS struct {
+		UUID       string  `ovsdb:"_uuid"`
+		OvsVersion *string `ovsdb:"ovs_version"`
+	}
+	type partialBridge struct {
+		UUID       string  `ovsdb:"_uuid"`
+		Name       string  `ovsdb:"name"`
+		DatapathID *string `ovsdb:"datapath_id"`
+	}
+
+	var schema ovsdb.DatabaseSchema
+	require.NoError(t, json.Unmarshal(schemaJSON, &schema))
+
+	clientModel, err := model.NewClientDBModel("Open_vSwitch", map[string]model.Model{
+		"Open_vSwitch": &partialOVS{},
+		"Bridge":       &partialBridge{},
+	})
+	require.NoError(t, err)
+	dbModel, errs := model.NewDatabaseModel(schema, clientModel)
+	require.Empty(t, errs)
+
+	tc, err := NewTableCache(dbModel, nil, nil)
+	require.NoError(t, err)
+
+	ovsUUID := "ca8d9a9c-b219-4dc1-a57d-fde1c5e4f814"
+	brUUID := "6350e784-f1fa-487a-857f-c889d2599a38"
+
+	// Initial population.
+	err = tc.Populate2(ovsdb.TableUpdates2{
+		"Open_vSwitch": {
+			ovsUUID: {Initial: &ovsdb.Row{"ovs_version": ovsdb.OvsSet{GoSet: []any{}}}},
+		},
+		"Bridge": {
+			brUUID: {Initial: &ovsdb.Row{"name": "br-int", "datapath_id": ovsdb.OvsSet{GoSet: []any{}}}},
+		},
+	})
+	require.NoError(t, err)
+
+	// Single notification modifies both tables with unmodeled columns mixed in.
+	err = tc.Populate2(ovsdb.TableUpdates2{
+		"Open_vSwitch": {
+			ovsUUID: {Modify: &ovsdb.Row{
+				"ovs_version":  "3.7.1",
+				"system_type":  "debian",
+				"external_ids": ovsdb.OvsMap{GoMap: map[any]any{"system-id": "id1"}},
+			}},
+		},
+		"Bridge": {
+			brUUID: {Modify: &ovsdb.Row{
+				"datapath_id":      "000086e750637a48",
+				"datapath_version": "<unknown>",
+			}},
+		},
+	})
+	require.NoError(t, err)
+
+	gotOVS := tc.Table("Open_vSwitch").Row(ovsUUID).(*partialOVS)
+	require.NotNil(t, gotOVS.OvsVersion)
+	assert.Equal(t, "3.7.1", *gotOVS.OvsVersion)
+
+	gotBr := tc.Table("Bridge").Row(brUUID).(*partialBridge)
+	require.NotNil(t, gotBr.DatapathID)
+	assert.Equal(t, "000086e750637a48", *gotBr.DatapathID)
+}

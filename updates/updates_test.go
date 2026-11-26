@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/ovn-kubernetes/libovsdb/model"
@@ -1828,4 +1829,92 @@ func TestModelUpdates_AddRowUpdate(t *testing.T) {
 			assert.Equal(t, tt.expected.updates, u.updates)
 		})
 	}
+}
+
+func TestPartialModelRowUpdates(t *testing.T) {
+	schemaJSON := []byte(`{
+		"name": "Open_vSwitch",
+		"version": "8.8.0",
+		"tables": {
+			"Open_vSwitch": {
+				"columns": {
+					"ovs_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"db_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"system_type": {"type": {"key": "string", "min": 0, "max": 1}},
+					"system_version": {"type": {"key": "string", "min": 0, "max": 1}},
+					"external_ids": {"type": {"key": "string", "value": "string", "min": 0, "max": "unlimited"}}
+				}
+			}
+		}
+	}`)
+
+	type partialOpenvSwitch struct {
+		UUID       string  `ovsdb:"_uuid"`
+		OvsVersion *string `ovsdb:"ovs_version"`
+	}
+
+	var schema ovsdb.DatabaseSchema
+	require.NoError(t, json.Unmarshal(schemaJSON, &schema))
+
+	clientModel, err := model.NewClientDBModel("Open_vSwitch", map[string]model.Model{
+		"Open_vSwitch": &partialOpenvSwitch{},
+	})
+	require.NoError(t, err)
+	dbModel, errs := model.NewDatabaseModel(schema, clientModel)
+	require.Empty(t, errs)
+
+	rowUUID := "ca8d9a9c-b219-4dc1-a57d-fde1c5e4f814"
+
+	// Initial snapshot with unmodeled db_version succeeds and leaves OvsVersion nil.
+	uInit := ModelUpdates{}
+	err = uInit.AddRowUpdate2(dbModel, "Open_vSwitch", rowUUID, nil, ovsdb.RowUpdate2{
+		Initial: &ovsdb.Row{
+			"db_version":  "8.8.0",
+			"ovs_version": ovsdb.OvsSet{GoSet: []any{}},
+		},
+	})
+	require.NoError(t, err)
+	current := uInit.GetModel("Open_vSwitch", rowUUID).(*partialOpenvSwitch)
+	require.Nil(t, current.OvsVersion)
+
+	// Modify containing both modeled ovs_version and unmodeled columns applies ovs_version.
+	uMod := ModelUpdates{}
+	err = uMod.AddRowUpdate2(dbModel, "Open_vSwitch", rowUUID, current, ovsdb.RowUpdate2{
+		Modify: &ovsdb.Row{
+			"ovs_version":    "3.7.1",
+			"system_type":    "debian",
+			"system_version": "12",
+			"external_ids":   ovsdb.OvsMap{GoMap: map[any]any{"system-id": "abc"}},
+		},
+	})
+	require.NoError(t, err)
+	updated, ok := uMod.GetModel("Open_vSwitch", rowUUID).(*partialOpenvSwitch)
+	require.True(t, ok)
+	require.NotNil(t, updated.OvsVersion)
+	assert.Equal(t, "3.7.1", *updated.OvsVersion)
+
+	// Modify containing only unmodeled columns is a no-op with no error.
+	uUnmodeledOnly := ModelUpdates{}
+	err = uUnmodeledOnly.AddRowUpdate2(dbModel, "Open_vSwitch", rowUUID, updated, ovsdb.RowUpdate2{
+		Modify: &ovsdb.Row{
+			"system_type": "ubuntu",
+		},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, uUnmodeledOnly.GetModel("Open_vSwitch", rowUUID))
+
+	// RFC 7047 RowUpdate (update notification) also skips unmodeled columns.
+	uLegacy := ModelUpdates{}
+	err = uLegacy.AddRowUpdate(dbModel, "Open_vSwitch", rowUUID, current, ovsdb.RowUpdate{
+		Old: &ovsdb.Row{"ovs_version": ovsdb.OvsSet{GoSet: []any{}}},
+		New: &ovsdb.Row{
+			"ovs_version": "3.7.1",
+			"system_type": "debian",
+		},
+	})
+	require.NoError(t, err)
+	updatedLegacy, ok := uLegacy.GetModel("Open_vSwitch", rowUUID).(*partialOpenvSwitch)
+	require.True(t, ok)
+	require.NotNil(t, updatedLegacy.OvsVersion)
+	assert.Equal(t, "3.7.1", *updatedLegacy.OvsVersion)
 }

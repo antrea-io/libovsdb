@@ -746,7 +746,9 @@ func (o *ovsdbClient) update3(params []json.RawMessage, reply *[]any) error {
 	err = db.cache.Update2(cookie, updates)
 	db.cacheMutex.RUnlock()
 
-	if err == nil {
+	if err != nil {
+		o.errorCh <- err
+	} else {
 		db.monitorsMutex.Lock()
 		mon := db.monitors[cookie.ID]
 		mon.LastTransactionID = lastTransactionID
@@ -916,15 +918,17 @@ func (o *ovsdbClient) Monitor(ctx context.Context, monitor *Monitor) (MonitorCoo
 	return cookie, o.monitor(ctx, cookie, false, monitor)
 }
 
-// If fields is provided, the request will be constrained to the provided columns
-// If no fields are provided, all columns will be used
+// If fields is provided, the request will be constrained to the provided columns.
+// If no fields are provided, all columns mapped in the client model will be used.
 func newMonitorRequest(data *mapper.Info, fields []string, conditions []ovsdb.Condition) (*ovsdb.MonitorRequest, error) {
 	var columns []string
 	if len(fields) > 0 {
 		columns = append(columns, fields...)
 	} else {
-		for c := range data.Metadata.TableSchema.Columns {
-			columns = append(columns, c)
+		for c := range data.Metadata.Fields {
+			if _, ok := data.Metadata.TableSchema.Columns[c]; ok {
+				columns = append(columns, c)
+			}
 		}
 	}
 	return &ovsdb.MonitorRequest{Columns: columns, Where: conditions, Select: ovsdb.NewDefaultMonitorSelect()}, nil
