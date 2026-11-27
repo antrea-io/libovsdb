@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -474,6 +475,9 @@ func modifyModel(dbModel model.DatabaseModel, table string, info *mapper.Info, m
 // modify. If the change is an update and a modify row is provided, it will be
 // filled with the modify data.
 func updateOrModifyModel(dbModel model.DatabaseModel, table string, info *mapper.Info, changeRow, modifyRow *ovsdb.Row, isModify bool) (bool, error) {
+	if info.Metadata.TableName != table {
+		return false, fmt.Errorf("model type for table %q does not match table %q", info.Metadata.TableName, table)
+	}
 	schema := dbModel.Schema.Table(table)
 	var changed bool
 
@@ -486,6 +490,11 @@ func updateOrModifyModel(dbModel model.DatabaseModel, table string, info *mapper
 
 		currentNative, err := info.FieldByColumn(column)
 		if err != nil {
+			var errColNotFound *mapper.ErrColumnNotFound
+			if errors.As(err, &errColNotFound) {
+				// ignore columns not present in the client model
+				continue
+			}
 			return false, err
 		}
 
